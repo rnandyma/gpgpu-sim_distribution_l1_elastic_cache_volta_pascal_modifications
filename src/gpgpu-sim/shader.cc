@@ -31,6 +31,7 @@
 #include <float.h>
 #include <limits.h>
 #include <string.h>
+#include <bits/stdc++.h>
 #include "../../libcuda/gpgpu_context.h"
 #include "../cuda-sim/cuda-sim.h"
 #include "../cuda-sim/ptx-stats.h"
@@ -3483,6 +3484,17 @@ void shader_core_ctx::display_pipeline(FILE *fout, int print_mem,
 unsigned int shader_core_config::max_cta(const kernel_info_t &k) const {
   unsigned threads_per_cta = k.threads_per_cta();
   const class function_info *kernel = k.entry();
+  unsigned dm_adaptive = 1;
+  printf("GPGPU-Sim uArch:\'%s\'\n",k.name().c_str());
+  if (k.name().find("lud") != std::string::npos) {
+    dm_adaptive = 0;
+}
+  else if (k.name().find("needle") != std::string::npos) {
+    dm_adaptive = 0;
+}
+  else dm_adaptive = 1;
+
+  //std::system()
   unsigned int padded_cta_size = threads_per_cta;
   if (padded_cta_size % warp_size)
     padded_cta_size = ((padded_cta_size / warp_size) + 1) * (warp_size);
@@ -3556,9 +3568,40 @@ unsigned int shader_core_config::max_cta(const kernel_info_t &k) const {
         case FIXED:
           break;
         case VOLTA: {
+	  if((m_L1D_config.get_cache_type() == ELASTIC) && (dm_adaptive == 1))
+	  { printf("inside volta elastic\n");
+	    assert(gpgpu_shmem_size <= 98304);  // Volta has 96 KB shared
+
+          // To Do: make it flexible and not tuned to 9KB share memory
+          unsigned max_assoc = m_L1D_config.get_max_assoc();
+          unsigned max_n_sets = 256*m_L1D_config.get_max_n_sets();
+          if (total_shmed == 0)
+            {m_L1D_config.set_n_sets(max_n_sets);
+            m_L1D_config.set_assoc(1);}  // L1 is 128KB and shd=0
+          else if (total_shmed > 0 && total_shmed <= 8192)
+            {m_L1D_config.set_n_sets(0.9375*max_n_sets);
+            m_L1D_config.set_assoc(1);}  // L1 is 120KB and shd=8KB
+          else if (total_shmed > 8192 && total_shmed <= 16384)
+            {m_L1D_config.set_n_sets(0.875*max_n_sets);
+	    m_L1D_config.set_assoc(1);}  // L1 is 112KB and shd=16KB
+          else if (total_shmed > 16384 && total_shmed <= 32768)
+            {m_L1D_config.set_n_sets(0.75*max_n_sets);
+	    m_L1D_config.set_assoc(1);}  // L1 is 96KB and shd=32KB
+          else if (total_shmed > 32768 && total_shmed <= 65536)
+            {m_L1D_config.set_n_sets(0.5*max_n_sets);
+	    m_L1D_config.set_assoc(1);} // L1 is 64KB and shd=64KB
+          else if (total_shmed > 65536 && total_shmed <= gpgpu_shmem_size)
+            {m_L1D_config.set_n_sets(0.25*max_n_sets);
+	    m_L1D_config.set_assoc(1);} // L1 is 32KB and shd=96KB
+          else
+            assert(0);
+          break;
+
+	   }
           // For Volta, we assign the remaining shared memory to L1 cache
           // For more info about adaptive cache, see
           // https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#shared-memory-7-x
+          else{
           assert(gpgpu_shmem_size <= 98304);  // Volta has 96 KB shared
 
           // To Do: make it flexible and not tuned to 9KB share memory
@@ -3582,6 +3625,7 @@ unsigned int shader_core_config::max_cta(const kernel_info_t &k) const {
           else
             assert(0);
           break;
+         }
         }
         default:
           assert(0);

@@ -960,6 +960,7 @@ class cache_config {
 
     m_sector_sz_log2 = LOGB2(SECTOR_SIZE);
     original_m_assoc = m_assoc;
+    original_m_nset = m_nset;
    m_word_sz_log2 = LOGB2(32);
     // For more details about difference between FETCH_ON_WRITE and WRITE
     // VALIDAE policies Read: Jouppi, Norman P. "Cache write policies and
@@ -1052,12 +1053,19 @@ class cache_config {
   }
   unsigned get_max_num_lines() const {
     assert(m_valid);
-    return MAX_DEFAULT_CACHE_SIZE_MULTIBLIER * m_nset * original_m_assoc;
+    //return MAX_DEFAULT_CACHE_SIZE_MULTIBLIER * m_nset * original_m_assoc;
+    return MAX_DEFAULT_CACHE_SIZE_MULTIBLIER * original_m_nset * original_m_assoc;
+
   }
   unsigned get_max_assoc() const {
     assert(m_valid);
     return MAX_DEFAULT_CACHE_SIZE_MULTIBLIER * original_m_assoc;
   }
+  unsigned get_max_n_sets() const {
+    assert(m_valid);
+    return MAX_DEFAULT_CACHE_SIZE_MULTIBLIER * original_m_nset;
+  }
+
   void print(FILE *fp) const {
     fprintf(fp, "Size = %d B (%d Set x %d-way x %d byte line)\n",
             m_line_sz * m_nset * m_assoc, m_nset, m_assoc, m_line_sz);
@@ -1108,6 +1116,10 @@ class cache_config {
   void set_assoc(unsigned n) {
     // set new assoc. L1 cache dynamically resized in Volta
     m_assoc = n;
+  }
+  void set_n_sets(unsigned n) {
+    // set new sets. L1 cache dynamically resized in Volta
+    m_nset = n;
   }
   unsigned get_nset() const {
     assert(m_valid);
@@ -1183,6 +1195,7 @@ unsigned m_word_sz_log2;
   friend class l1_elastic_cache;
   friend class l2_cache;
   friend class memory_sub_partition;
+  unsigned original_m_nset;
 };
 
 class l1d_cache_config : public cache_config {
